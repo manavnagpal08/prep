@@ -40,15 +40,21 @@ HABITS = [
 # ==========================================================
 
 try:
-    # Ensure secrets exist
-    if "firebase_key" not in st.secrets or "database_url" not in st.secrets:
-        st.error("Firebase secrets missing in secrets.toml.")
-        st.stop()
+    # Build service account dict manually
+    key_dict = {
+        "type": st.secrets["type"],
+        "project_id": st.secrets["project_id"],
+        "private_key_id": st.secrets["private_key_id"],
+        "private_key": st.secrets["private_key"],
+        "client_email": st.secrets["client_email"],
+        "client_id": st.secrets["client_id"],
+        "auth_uri": st.secrets["auth_uri"],
+        "token_uri": st.secrets["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["client_x509_cert_url"],
+        "universe_domain": st.secrets["universe_domain"],
+    }
 
-    # Convert JSON string -> Python dict
-    key_dict = json.loads(st.secrets["firebase_key"])
-
-    # Initialize Firebase once
     if not firebase_admin._apps:
         cred = credentials.Certificate(key_dict)
         firebase_admin.initialize_app(cred, {
