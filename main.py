@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import firebase_admin
 from firebase_admin import credentials, db
+import json
 import uuid
 from collections import defaultdict
 
@@ -15,11 +16,12 @@ from collections import defaultdict
 st.set_page_config(page_title="AI/DS Progress Tracker", layout="wide", initial_sidebar_state="expanded")
 
 # --- FIXED USERS ---
+# Only Manav and Kaaysha are authorized.
 USERS = {
     "manav": "1234",
     "kaaysha": "1234",
 }
-PEER_USERS = list(USERS.keys()) # ['manav', 'kaaysha']
+PEER_USERS = list(USERS.keys())
 
 # --- HABITS LIST ---
 HABITS = [
@@ -34,55 +36,68 @@ HABITS = [
 ]
 
 # --- FIREBASE SETUP ---
-# ⚠️ ACTION REQUIRED: 
-# 1. Replace 'path/to/your/serviceAccountKey.json' with the actual path (or just the filename if in the same folder).
-# 2. Replace 'YOUR_FIREBASE_DATABASE_URL' with your actual database URL (e.g., 'https://my-project-default-rtdb.firebaseio.com')
+# ⚠️ This code attempts to load credentials securely from st.secrets first.
 try:
-    if not firebase_admin._apps:
-        # Load the service account key (replace the path/filename)
-        cred = credentials.Certificate('firebase-key.json') 
-        firebase_admin.initialize_app(cred, {
-            'databaseURL': 'https://placements-3d786-default-rtdb.firebaseio.com' 
-        })
-    database_ref = db.reference('/')
-    
-except FileNotFoundError:
-    st.error("FATAL ERROR: Firebase Service Account Key not found. Please check the file path in the code.")
-    st.stop()
-except Exception as e:
-    if "already been initialized" not in str(e):
-        st.error(f"FATAL ERROR: Firebase Initialization Failed: {e}")
+    if 'firebase_key' in st.secrets and 'database_url' in st.secrets:
+        # Load the key from st.secrets
+        key_dict = json.loads(st.secrets['firebase_key'])
+        cred = credentials.Certificate(key_dict)
+        db_url = st.secrets['database_url']
+
+    else:
+        # If secrets are not available (e.g., local testing without secrets.toml), stop and prompt user.
+        # Note: You MUST provide the Service Account Key file name/path for local testing if not using secrets.toml.
+        st.error("FATAL ERROR: Firebase secrets not found. Please ensure 'firebase_key' and 'database_url' are configured in st.secrets.")
         st.stop()
 
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred, {'databaseURL': db_url})
+    
+    database_ref = db.reference('/')
+    
+except Exception as e:
+    if "already been initialized" not in str(e):
+        st.error(f"FATAL ERROR: Firebase Initialization Failed. Check your JSON format in secrets. Error: {e}")
+        st.stop()
+
+# -----------------------------
+# DESIGN/STYLES (Requires styles.css in the same directory)
+# -----------------------------
+try:
+    with open("styles.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+except FileNotFoundError:
+    pass # No warning needed if CSS is optional.
 
 # ==========================================================
-# 2. DATABASE WRAPPER FUNCTIONS
+# 2. DATABASE WRAPPER FUNCTIONS & CACHING
 # ==========================================================
 
-# These functions replace the mock functions and interact with Firebase
 def fire_read(path):
+    """Reads data from Firebase."""
     return db.reference(path).get()
 
 def fire_write(path, data):
+    """Writes data to Firebase."""
     db.reference(path).set(data)
     return True
 
 def fire_update(path, data):
+    """Updates data in Firebase."""
     db.reference(path).update(data)
     return True
 
 def fire_push(path, data):
-    """Pushes new data and returns the unique key."""
+    """Pushes new data with a unique key and returns the key."""
     new_ref = db.reference(path).push(data)
     return new_ref.key
 
-# -----------------------------
-# UTILITY FUNCTIONS
-# -----------------------------
 @st.cache_data(ttl=600)
 def get_daily_logs(user):
+    """Fetches and processes daily logs."""
     data = fire_read(f"daily/{user}") or {}
     if data:
+        # Include the unique key for potential updates/deletion if needed later
         df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()])
         df['date'] = pd.to_datetime(df['date'])
         df['productivity'] = pd.to_numeric(df['productivity'], errors='coerce')
@@ -93,6 +108,7 @@ def get_daily_logs(user):
 
 @st.cache_data(ttl=600)
 def get_habit_logs(user):
+    """Fetches and processes habit logs."""
     data = fire_read(f"habits/{user}") or {}
     if data:
         df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()])
@@ -101,21 +117,12 @@ def get_habit_logs(user):
         return df
     return pd.DataFrame()
 
-# -----------------------------
-# DESIGN/STYLES
-# -----------------------------
-try:
-    with open("styles.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    st.warning("Could not find 'styles.css'. Using basic formatting.")
-
 
 # ==========================================================
 # 3. PAGE FUNCTIONS
 # ==========================================================
 
-# --- LOGIN ---
+# --- LOGIN PAGE ---
 def login_page():
     st.title("🔑 AI/DS Student Progress Tracker")
 
@@ -174,7 +181,6 @@ def dashboard():
     else:
         st.info("Start logging your daily work to see a summary here!")
 
-
 # --- DAILY PLANNER ---
 def daily_planner():
     st.header("📝 Daily Pre-Work Planner", divider='orange')
@@ -198,7 +204,7 @@ def daily_planner():
             plan = {"date": today, "p1": p1, "p2": p2, "p3": p3, "est_hours": est_hours, "focus_area": focus_area}
             fire_write(planner_key, plan)
             st.success("Daily Plan Saved! Ready for execution.")
-            st.cache_data.clear() # Clear cache after write
+            st.cache_data.clear()
             st.experimental_rerun()
             
     if current_plan:
@@ -536,8 +542,7 @@ def graphs_and_insights():
         st.subheader("Improvement Suggestions (Based on Your Logs)")
 
         df_work = get_daily_logs(st.session_state['user'])
-        df_habits = get_habit_logs(st.session_state['user'])
-
+        
         if df_work.empty:
             st.info("Add some logs to generate suggestions.")
             return
@@ -545,7 +550,6 @@ def graphs_and_insights():
         suggestions = []
         avg_productivity = df_work['productivity'].mean().round(2)
         avg_energy = df_work['energy'].mean().round(2)
-        avg_hours = df_work['hours'].mean().round(2)
 
         if avg_productivity < 3.8:
              suggestions.append(f"**Productivity is moderate ({avg_productivity}/5).** Try implementing the **Pomodoro technique** or dedicated **deep work sessions** to minimize distractions.")
@@ -607,7 +611,6 @@ else:
         "Graphs & Insights": graphs_and_insights
     }
 
-    # Set initial page state if not already set
     if "page" not in st.session_state:
          st.session_state["page"] = "Dashboard"
 
