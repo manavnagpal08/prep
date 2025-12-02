@@ -1,2 +1,7 @@
 plotly
 fPDF
+streamlit
+
+firebase-admin
+pandas
+plotly
