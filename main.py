@@ -12,11 +12,9 @@ from collections import defaultdict
 # 1. CONFIGURATION AND FIREBASE SETUP
 # ==========================================================
 
-# --- PAGE CONFIG ---
 st.set_page_config(page_title="AI/DS Progress Tracker", layout="wide", initial_sidebar_state="expanded")
 
 # --- FIXED USERS ---
-# Only Manav and Kaaysha are authorized.
 USERS = {
     "manav": "1234",
     "kaaysha": "1234",
@@ -35,17 +33,32 @@ HABITS = [
     "Wake Up on Time"
 ]
 
-# --- FIREBASE SETUP (Securely reading from st.secrets) ---
-try:
-    if 'firebase_key' in st.secrets and 'database_url' in st.secrets:
-        # Load the key from st.secrets and parse the JSON string
-        key_dict = json.loads(st.secrets['firebase_key'])
-        cred = credentials.Certificate(key_dict)
-        db_url = st.secrets['database_url']
+# --- FIREBASE SETUP (HARDCODED) ---
+# 🚨 WARNING: This method is highly insecure and should only be used for local testing.
+# Never deploy an app with hardcoded credentials!
 
-    else:
-        st.error("FATAL ERROR: Firebase secrets not found. Please ensure 'firebase_key' and 'database_url' are configured in st.secrets.")
-        st.stop() # Stops execution if secrets aren't found.
+try:
+    # 1. DEFINE YOUR CREDENTIALS HERE
+    # You must paste your entire Firebase Service Account Key JSON content here
+    FIREBASE_KEY_JSON = {
+      "type": "service_account",
+      "project_id": "placements-3d786",
+      "private_key_id": "cb2fc0405cedae298805865ce592cb1015849f8a",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCsEUl0KToUX4rG\nK0G1CGYQLi9K2HbZE+qGFgUAlpVzqUTMc2l6Q6VaGpf0KEu905nMF80zzsFP2gd0\n7AKA4wI4vpFkor723cCQb4iqCrDAW0+V2gwEzWcoDkZTmp5pWkkIzwGUjzSUUxZT\nr1k0PrXiq47T5h92Lp3lWBzWrMuM3AAOsddukGj2zP+ceTiBH7SsokdsRvYFA2fp\nElzMIeyVSIRuKINFHcAjHmCPUjcPIHm4nisky+3u8kFiZ/zOtlT+/5kGpl1NCnFM\nw6ZpoCHtpRzncWDHJu07SRW2I1dWI21bxkmyOKt+khzMvpKQwxn/CbADXaHdu/+x\nSpSQecPlAgMBAAECggEAPB++Puy48q1/3Eb5KrzIjRbWR5zjym5/IGNJVC9KAaQ/\n+gDJ9oL0oEtylUoPTUFHGF2owlWYjsJsoJpnNYodGJ7eRv/nInPR+aY/Zstdf5lo\nccBDOtpbFVAHmucIO1/k7UMIFlUD1mBCCPPYg7z16UJxIfHjRHR9j8n+KbUvWwRi\nANNp+rIGkDCuduWS0Q00OyNHAw09mv2AAtAVAfhopSfEvySYNMlgsU1d6BdI4b3K\nFMsHcIVTEMrCOURujqiJ4zpZvG18EQrTo+ObJ1ldA9f9PHnC40bC/LWuXNmJT3cl\n85ABCpdwnwu/w9D38YGOjE3MNxQrGLe+iJrcbjx88QKBgQDUpY6pXSfeQ0CvDZA0\nh70hBquXLL5ElhjkrkI9ob5bUKmZqnkrf+dYsIXv5Ddb/hMv/ROaB8uR9O2iEI5t\nCxbHKBstSpIYmrIS/D3Il33QpTVw3DgL1U27uCAurVjwMQkNLhrdWXY9I7jkxheK\nOfKAkpAHK0eDtW/q2KiXUXX4lwKBgQDPJdLiEljr+pxLG4rHiIVw5me09kk7yFBM\nObGsCxJg3iBwQRlIX2BJXlDnMdJFQYoA3HCg/hgQP57nclQs3LgY3VQn3oTykc3f\n9gadcPXGsa/T4XhjgrXXo4bcit7+L1aAyneimmW+R5JbZr1CWmAXxVKG8H9EERo7\nNXKrADka4wKBgA2wdsWqbJWfaLucOOtYzbEhl8xMohcSPpoCKduD3RhN0g1FbzWA\nr2kDPCwcWf//FEcjmK5y0AUeamnjfPfCHf5GM7GvukYBN3OHb4bJUd0rtYwFcUo5\nuh5alR/MIwyba4TAshQL3VPER/PaWMuaPWVPihwcCieNd537wqazJNATAoGARadt\nStFqjyb86RCA0OlqHXWMR8BNDcokng0EXlp2upXWiIiLTNetU95gC+2ny9vm4LU/\nNhNa2hPahe7euRsa2FmME7/yKnK2rGlY/hXevwo+mluFlMh+Bt2Y2o3jv8sBJltu\ncQHD1oDQiOV6HFaxWyzhvDggQy4RCPnG7hMsIIsCgYBgVyR+a262NXEGOrwrF2AO\no69newJtcjQekzmbw2cwlAmxi+6HOzNByoYYhBltxM19ogO/PvhqPvd8u83W3sV/\nzTs6S3b2/ykbsBz04IHSXpZcSut1vCfQlvIz7BKZhDvkMIbnaGdDjXqP/+NvTz5S\n4HJzW7TpdVvvS9LExe0fEA==\n-----END PRIVATE KEY-----\n",
+      "client_email": "firebase-adminsdk-fbsvc@placements-3d786.iam.gserviceaccount.com",
+      "client_id": "109951182890829263388",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40placements-3d786.iam.gserviceaccount.com",
+      "universe_domain": "googleapis.com"
+    }
+
+    DATABASE_URL = "https://placements-3d786-default-rtdb.firebaseio.com"
+
+    # 2. INITIALIZE FIREBASE
+    cred = credentials.Certificate(FIREBASE_KEY_JSON)
+    db_url = DATABASE_URL
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {'databaseURL': db_url})
@@ -55,8 +68,8 @@ try:
 except Exception as e:
     # Handles the case where Firebase might be initialized twice (common in Streamlit)
     if "already been initialized" not in str(e):
-        st.error(f"FATAL ERROR: Firebase Initialization Failed. Check your JSON format in secrets. Error: {e}")
-        st.stop() 
+        st.error(f"FATAL ERROR: Firebase Initialization Failed. Error: {e}")
+        st.stop()
 
 # -----------------------------
 # DESIGN/STYLES (Optional: Requires styles.css in the same directory)
