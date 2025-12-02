@@ -35,20 +35,17 @@ HABITS = [
     "Wake Up on Time"
 ]
 
-# --- FIREBASE SETUP ---
-# ⚠️ This code attempts to load credentials securely from st.secrets first.
+# --- FIREBASE SETUP (Securely reading from st.secrets) ---
 try:
     if 'firebase_key' in st.secrets and 'database_url' in st.secrets:
-        # Load the key from st.secrets
+        # Load the key from st.secrets and parse the JSON string
         key_dict = json.loads(st.secrets['firebase_key'])
         cred = credentials.Certificate(key_dict)
         db_url = st.secrets['database_url']
 
     else:
-        # If secrets are not available (e.g., local testing without secrets.toml), stop and prompt user.
-        # Note: You MUST provide the Service Account Key file name/path for local testing if not using secrets.toml.
         st.error("FATAL ERROR: Firebase secrets not found. Please ensure 'firebase_key' and 'database_url' are configured in st.secrets.")
-        st.stop()
+        st.stop() # Stops execution if secrets aren't found.
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {'databaseURL': db_url})
@@ -56,18 +53,19 @@ try:
     database_ref = db.reference('/')
     
 except Exception as e:
+    # Handles the case where Firebase might be initialized twice (common in Streamlit)
     if "already been initialized" not in str(e):
         st.error(f"FATAL ERROR: Firebase Initialization Failed. Check your JSON format in secrets. Error: {e}")
-        st.stop()
+        st.stop() 
 
 # -----------------------------
-# DESIGN/STYLES (Requires styles.css in the same directory)
+# DESIGN/STYLES (Optional: Requires styles.css in the same directory)
 # -----------------------------
 try:
     with open("styles.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
-    pass # No warning needed if CSS is optional.
+    pass 
 
 # ==========================================================
 # 2. DATABASE WRAPPER FUNCTIONS & CACHING
@@ -97,7 +95,6 @@ def get_daily_logs(user):
     """Fetches and processes daily logs."""
     data = fire_read(f"daily/{user}") or {}
     if data:
-        # Include the unique key for potential updates/deletion if needed later
         df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()])
         df['date'] = pd.to_datetime(df['date'])
         df['productivity'] = pd.to_numeric(df['productivity'], errors='coerce')
@@ -338,7 +335,7 @@ def weekly_goals():
     data = fire_read(f"goals/{st.session_state['user']}") or {}
     if data:
         df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()])
-        df['key'] = data.keys() # Add keys for updating
+        df['key'] = data.keys() 
         df = df.sort_values(by=['week', 'status'], ascending=[False, True])
         current_week_df = df[df['week'] == current_week]
         
