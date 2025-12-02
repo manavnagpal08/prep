@@ -1,25 +1,68 @@
-/* Hide Streamlit header */
-header, .stApp > header { 
-    display: none !important; 
+/* Custom CSS for a Clean, Professional Look */
+
+/* General Background and Font */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #333;
+    background-color: #f0f2f6; /* Very light gray background */
 }
 
-/* Hide sidebar */
-.css-1d391kg { 
-    display: none; 
-}
-
-/* Center layout */
-.block-container {
-    padding-top: 2rem;
-    max-width: 900px !important;
-}
-
-/* Clean Input Fields */
-input, textarea, select {
-    border-radius: 8px !important;
-}
-
-/* Page Title */
+/* Headings and Dividers */
 h1, h2, h3 {
-    font-weight: 600 !important;
+    color: #1f77b4; /* Primary blue color */
+    font-weight: 600;
+}
+/* This targets the Streamlit-rendered divider, making it more visible */
+[data-testid="stHeader"] + div > div:first-child > div:nth-child(2) > div:first-child > div:nth-child(1) {
+    border-top: 3px solid #1f77b4 !important; 
+    margin: 20px 0;
+}
+
+/* Customizing Streamlit Widgets */
+
+/* Primary Button Style (Used for Save/Login) */
+.stButton>button[kind="primary"] {
+    background-color: #4CAF50; /* Green for primary action */
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    text-align: center;
+    font-size: 16px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
+}
+.stButton>button[kind="primary"]:hover {
+    background-color: #45a049;
+}
+
+/* Secondary Button Style (Used for Navbar) */
+.stButton>button[kind="secondary"] {
+    background-color: #e9ecef; /* Light gray for non-active buttons */
+    color: #333;
+    border: 1px solid #ced4da;
+    border-radius: 5px;
+}
+
+/* Metrics (for the Dashboard) */
+[data-testid="stMetric"] {
+    background-color: #ffffff;
+    padding: 15px 15px;
+    border-radius: 10px;
+    border-left: 5px solid #1f77b4; /* Accent border */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+[data-testid="stMetricLabel"] {
+    font-size: 1.1rem;
+    color: #555;
+}
+[data-testid="stMetricValue"] {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #1f77b4; /* Matching the primary color */
+}
+
+/* Info/Warning/Success Boxes */
+[data-testid="stAlert"] {
+    border-radius: 8px;
+    padding: 10px 15px;
 }
