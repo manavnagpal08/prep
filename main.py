@@ -39,8 +39,11 @@ HABITS = [
 # FIREBASE INITIALIZATION (FINAL FIXED VERSION)
 # ==========================================================
 
+# ==========================================================
+# FIREBASE INITIALIZATION (FINAL FIX)
+# ==========================================================
+
 try:
-    # Build service account dict manually
     key_dict = {
         "type": st.secrets["type"],
         "project_id": st.secrets["project_id"],
@@ -66,6 +69,7 @@ try:
 except Exception as e:
     st.error(f"🔥 FATAL ERROR: Firebase initialization failed.\n\n{e}")
     st.stop()
+
 
 # -----------------------------
 # DESIGN/STYLES (Optional: Requires styles.css in the same directory)
