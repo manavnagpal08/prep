@@ -1,0 +1,25 @@
+/* Hide Streamlit header */
+header, .stApp > header { 
+    display: none !important; 
+}
+
+/* Hide sidebar */
+.css-1d391kg { 
+    display: none; 
+}
+
+/* Center layout */
+.block-container {
+    padding-top: 2rem;
+    max-width: 900px !important;
+}
+
+/* Clean Input Fields */
+input, textarea, select {
+    border-radius: 8px !important;
+}
+
+/* Page Title */
+h1, h2, h3 {
+    font-weight: 600 !important;
+}
