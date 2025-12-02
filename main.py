@@ -40,9 +40,9 @@ HABITS = [
 try:
     if not firebase_admin._apps:
         # Load the service account key (replace the path/filename)
-        cred = credentials.Certificate('YOUR_SERVICE_ACCOUNT_KEY_FILENAME.json') 
+        cred = credentials.Certificate('firebase-key.json') 
         firebase_admin.initialize_app(cred, {
-            'databaseURL': 'YOUR_FIREBASE_DATABASE_URL' 
+            'databaseURL': 'https://placements-3d786-default-rtdb.firebaseio.com' 
         })
     database_ref = db.reference('/')
     
