@@ -222,7 +222,7 @@ def daily_planner():
             fire_write(planner_path, plan)
             st.success("Daily Plan Saved! Ready for execution.")
             st.cache_data.clear()
-            st.experimental_rerun()
+            st.rerun()
             
     if current_plan:
         st.markdown("---")
@@ -253,7 +253,7 @@ def daily_work():
             fire_push(f"daily/{st.session_state['user']}", entry)
             st.success("Daily work saved! Check the 'Graphs & Insights' for your trend.")
             st.cache_data.clear()
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("---")
     st.subheader("History (Recent Logs)")
@@ -282,7 +282,7 @@ def projects():
                 fire_push(f"projects/{st.session_state['user']}", entry) 
                 st.success("Project saved/updated.")
                 st.cache_data.clear()
-                st.experimental_rerun()
+                st.rerun()
 
     st.subheader("Project Status (Pending Work)")
     data = fire_read(f"projects/{st.session_state['user']}") or {}
@@ -314,7 +314,7 @@ def learning():
             fire_push(f"learning/{st.session_state['user']}", entry)
             st.success("Learning saved. Track your skills!")
             st.cache_data.clear()
-            st.experimental_rerun()
+            st.rerun()
 
     st.subheader("Learning History")
     data = fire_read(f"learning/{st.session_state['user']}") or {}
@@ -351,7 +351,7 @@ def weekly_goals():
                 fire_push(f"goals/{st.session_state['user']}", entry)
                 st.success("Goal added! Good luck.")
                 st.cache_data.clear()
-                st.experimental_rerun()
+                st.rerun()
 
     st.subheader("Current Week Goals")
     data = fire_read(f"goals/{st.session_state['user']}") or {}
@@ -388,7 +388,7 @@ def weekly_goals():
                     fire_update(f"goals/{st.session_state['user']}/{key_to_update}", {"status": new_status})
                     st.success(f"Status for '{goal_to_update}' updated to **{new_status}**.")
                     st.cache_data.clear()
-                    st.experimental_rerun()
+                    st.rerun()
             else:
                 st.info("All current goals are completed or no goals set!")
         else:
@@ -434,7 +434,7 @@ def habits():
                 st.success("Habit log saved!")
                 
             st.cache_data.clear()
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("---")
     st.subheader("Habit Consistency & Streak")
