@@ -2,14 +2,26 @@ import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
 import plotly.express as px
-import random
+import firebase_admin
+from firebase_admin import credentials, db
 import uuid
 from collections import defaultdict
 
 # ==========================================================
-# 1. MOCKING FIREBASE FUNCTIONS & DUMMY DATA SETUP
+# 1. CONFIGURATION AND FIREBASE SETUP
 # ==========================================================
 
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="AI/DS Progress Tracker", layout="wide", initial_sidebar_state="expanded")
+
+# --- FIXED USERS ---
+USERS = {
+    "manav": "1234",
+    "kaaysha": "1234",
+}
+PEER_USERS = list(USERS.keys()) # ['manav', 'kaaysha']
+
+# --- HABITS LIST ---
 HABITS = [
     "1 LeetCode/DSA Problem",
     "Review AI/ML Notes",
@@ -21,154 +33,55 @@ HABITS = [
     "Wake Up on Time"
 ]
 
-# FIXED LOGIN CREDENTIALS (Only 3 users allowed)
-USERS = {
-    "manav": "1234",
-    "kaaysha": "1234",
-    "pranav": "1234"
-}
-
-def generate_user_data(user, is_high_performer=True):
-    """Generates consistent dummy data based on performance profile."""
-    
-    daily_data = {}
-    habits_data = {}
-    
-    today = datetime.now().date()
-    
-    # Define performance profile
-    if user == "manav" or user == "pranav":
-        # High Performer Profile (Manav/Pranav)
-        hour_range = (4.0, 7.5)  
-        prod_min = 4
-        habit_success_rate = 0.85
-    else:
-        # Average Performer Profile (Kaaysha)
-        hour_range = (2.5, 5.5)  
-        prod_min = 3
-        habit_success_rate = 0.65
-
-    for i in range(14):
-        date_i = today - timedelta(days=i)
-        date_str = date_i.strftime("%Y-%m-%d")
-        
-        # Daily Work Log
-        hours = round(random.uniform(*hour_range), 1)
-        productivity = random.randint(prod_min, 5)
-        mood = random.randint(prod_min, 5)
-        
-        task_list = [
-            f"Completed LeetCode {random.choice(['Medium', 'Hard'])} and reviewed the optimal solution.",
-            f"Dedicated {hours} hours to focused deep work on project feature.",
-            f"Revised core concepts from previous week's lecture and made flashcards.",
-            f"Finished 1/3 of the assigned reading and documented key takeaways.",
-        ]
-        
-        log_key = str(uuid.uuid4())
-        daily_data[log_key] = {
-            "task": random.choice(task_list),
-            "hours": hours,
-            "mood": mood,
-            "productivity": productivity,
-            "energy": random.randint(prod_min, 5),
-            "date": date_str
-        }
-
-        # Habit Log
-        habits_key = str(uuid.uuid4())
-        habits_done = {h: (random.random() < habit_success_rate) for h in HABITS}
-        
-        habits_data[habits_key] = {
-            "date": date_str,
-            "habits": habits_done
-        }
-    
-    # Static Data for Project/Learning/Goals
-    is_high_performer = (user == "manav" or user == "pranav")
-    projects_data = {
-        "p1": {"name": "Semester Project (AI/ML Model)", "progress": 75 if is_high_performer else 50, "notes": "Need to integrate final testing dataset.", "updated": "2025-11-28"},
-        "p2": {"name": "Personal Portfolio Website", "progress": 90 if is_high_performer else 70, "notes": "Final CSS styling and deployment pending.", "updated": "2025-12-01"},
-    }
-
-    learning_data = {
-        "l1": {"topic": "Transformer Architecture (Attention Mechanism)", "source": "Deep Learning Book Chapter 5", "link": "", "keywords": ["NLP", "AI", "DL"], "date": "2025-12-01"},
-        "l2": {"topic": "Advanced Pandas Vectorization", "source": "YouTube - Data Science Channel", "link": "link_to_video", "keywords": ["Data Science", "Python"], "date": "2025-11-28"},
-    }
-
-    goals_data = {
-        "g1": {"goal": "Complete 10 LeetCode Mediums", "target": "Must include 3 DP problems.", "week": datetime.now().isocalendar().week, "status": "In Progress"},
-        "g2": {"goal": "Finish 2 chapters of DL book review", "target": "100% conceptual clarity.", "week": datetime.now().isocalendar().week, "status": "To Do"},
-        "g3": {"goal": "Fixed Project Bug", "target": "Authentication bug resolved.", "week": (datetime.now() - timedelta(days=7)).isocalendar().week, "status": "Completed"},
-    }
-    
-    # Assemble all data into the path-based mock structure
-    user_data = {
-        f"daily/{user}": daily_data,
-        f"habits/{user}": habits_data,
-        f"projects/{user}": projects_data,
-        f"learning/{user}": learning_data,
-        f"goals/{user}": goals_data,
-        f"planner/{user}/{today.strftime('%Y-%m-%d')}": {"p1": "Solve today's LeetCode problem", "est_hours": 4.5, "focus_area": "DSA/AI"}
-    }
-    
-    return user_data
-
-# Initialize Mock Database with data for the three users
-MOCK_DB = {}
-MOCK_DB.update(generate_user_data("manav", is_high_performer=True))
-MOCK_DB.update(generate_user_data("kaaysha", is_high_performer=False))
-MOCK_DB.update(generate_user_data("pranav", is_high_performer=True))
-
-# --- Mock Firebase Functions ---
-def read(path):
-    """Mocks the read function using the MOCK_DB store."""
-    return MOCK_DB.get(path)
-
-def write(path, data):
-    """Mocks the write function (overwrites)."""
-    MOCK_DB[path] = data
-    return True
-
-def update(path, data):
-    """Mocks the update function (merges)."""
-    if path in MOCK_DB and isinstance(MOCK_DB[path], dict):
-        MOCK_DB[path].update(data)
-    else:
-        MOCK_DB[path] = data 
-    return True
-
-def push(path, data):
-    """Mocks the push function (adds a unique key)."""
-    if path not in MOCK_DB:
-        MOCK_DB[path] = {}
-    
-    key = str(uuid.uuid4())
-    MOCK_DB[path][key] = data
-    return key
-
-
-# ==========================================================
-# 2. STREAMLIT APP CODE
-# ==========================================================
-
-# -----------------------------
-# PAGE CONFIG
-# -----------------------------
-st.set_page_config(page_title="Student Progress Tracker", layout="wide", initial_sidebar_state="collapsed")
-
-# Load CSS
+# --- FIREBASE SETUP ---
+# ⚠️ ACTION REQUIRED: 
+# 1. Replace 'path/to/your/serviceAccountKey.json' with the actual path (or just the filename if in the same folder).
+# 2. Replace 'YOUR_FIREBASE_DATABASE_URL' with your actual database URL (e.g., 'https://my-project-default-rtdb.firebaseio.com')
 try:
-    with open("styles.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    if not firebase_admin._apps:
+        # Load the service account key (replace the path/filename)
+        cred = credentials.Certificate('YOUR_SERVICE_ACCOUNT_KEY_FILENAME.json') 
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': 'YOUR_FIREBASE_DATABASE_URL' 
+        })
+    database_ref = db.reference('/')
+    
 except FileNotFoundError:
-    st.warning("Could not find 'styles.css'. Using basic formatting.")
+    st.error("FATAL ERROR: Firebase Service Account Key not found. Please check the file path in the code.")
+    st.stop()
+except Exception as e:
+    if "already been initialized" not in str(e):
+        st.error(f"FATAL ERROR: Firebase Initialization Failed: {e}")
+        st.stop()
+
+
+# ==========================================================
+# 2. DATABASE WRAPPER FUNCTIONS
+# ==========================================================
+
+# These functions replace the mock functions and interact with Firebase
+def fire_read(path):
+    return db.reference(path).get()
+
+def fire_write(path, data):
+    db.reference(path).set(data)
+    return True
+
+def fire_update(path, data):
+    db.reference(path).update(data)
+    return True
+
+def fire_push(path, data):
+    """Pushes new data and returns the unique key."""
+    new_ref = db.reference(path).push(data)
+    return new_ref.key
 
 # -----------------------------
 # UTILITY FUNCTIONS
 # -----------------------------
 @st.cache_data(ttl=600)
 def get_daily_logs(user):
-    data = read(f"daily/{user}") or {}
+    data = fire_read(f"daily/{user}") or {}
     if data:
         df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()])
         df['date'] = pd.to_datetime(df['date'])
@@ -180,7 +93,7 @@ def get_daily_logs(user):
 
 @st.cache_data(ttl=600)
 def get_habit_logs(user):
-    data = read(f"habits/{user}") or {}
+    data = fire_read(f"habits/{user}") or {}
     if data:
         df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()])
         df['date'] = pd.to_datetime(df['date'])
@@ -188,10 +101,21 @@ def get_habit_logs(user):
         return df
     return pd.DataFrame()
 
+# -----------------------------
+# DESIGN/STYLES
+# -----------------------------
+try:
+    with open("styles.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+except FileNotFoundError:
+    st.warning("Could not find 'styles.css'. Using basic formatting.")
 
-# -----------------------------
-# LOGIN PAGE
-# -----------------------------
+
+# ==========================================================
+# 3. PAGE FUNCTIONS
+# ==========================================================
+
+# --- LOGIN ---
 def login_page():
     st.title("🔑 AI/DS Student Progress Tracker")
 
@@ -206,44 +130,15 @@ def login_page():
         else:
             st.error("Invalid credentials")
     
-    st.info("Demo users: **manav** / **kaaysha** / **pranav**. Password: **1234**")
+    st.info("Available users: **manav** / **kaaysha**. Password: **1234**")
 
 
-# -----------------------------
-# NAVIGATION BAR
-# -----------------------------
-def navbar():
-    st.markdown("---")
-    pages = [
-        "Dashboard", "Daily Planner", "Daily Log", "Projects", "Learning", 
-        "Weekly Goals", "Habits", "Peer Review", "Graphs & Insights" 
-    ]
-    
-    # Use 10 columns for pages and 1 for logout/spacer
-    cols = st.columns([0.1]*9 + [0.1])
-    
-    for idx, pg in enumerate(pages):
-        button_type = "primary" if st.session_state.get("page") == pg else "secondary"
-        # Only use the first 9 columns for navigation buttons
-        if idx < 9 and cols[idx].button(pg, type=button_type, key=f"nav_{pg}"):
-            st.session_state["page"] = pg
-            st.rerun()
-            
-    if cols[-1].button("Logout 🚪", key="nav_logout"):
-        st.session_state.clear()
-        st.rerun()
-        
-    st.markdown("---")
-
-
-# -----------------------------
-# DASHBOARD (Simplified for brevity, see prior code for full details)
-# -----------------------------
+# --- DASHBOARD ---
 def dashboard():
     st.header(f"🚀 Welcome Back, **{st.session_state['user'].title()}**!", divider='blue')
 
     df_work = get_daily_logs(st.session_state['user'])
-    df_proj = pd.DataFrame((read(f"projects/{st.session_state['user']}") or {}).values())
+    df_proj = pd.DataFrame((fire_read(f"projects/{st.session_state['user']}") or {}).values())
     
     col1, col2, col3, col4 = st.columns(4)
 
@@ -253,7 +148,6 @@ def dashboard():
     
     st.markdown("---")
     
-    # 2. Daily Log Snapshot (Last 7 Days)
     st.subheader("🗓️ Recent Performance Summary")
     
     if not df_work.empty:
@@ -261,7 +155,6 @@ def dashboard():
         df_work_recent = df_work[df_work['date'] >= one_week_ago.strftime('%Y-%m-%d')]
         
         if not df_work_recent.empty:
-            
             avg_hours = df_work_recent['hours'].mean().round(1)
             avg_prod = df_work_recent['productivity'].mean().round(2)
 
@@ -281,18 +174,269 @@ def dashboard():
     else:
         st.info("Start logging your daily work to see a summary here!")
 
-# -----------------------------
-# PEER REVIEW PAGE (NEW)
-# -----------------------------
+
+# --- DAILY PLANNER ---
+def daily_planner():
+    st.header("📝 Daily Pre-Work Planner", divider='orange')
+    today = datetime.now().strftime("%Y-%m-%d")
+    planner_key = f"planner/{st.session_state['user']}/{today}"
+    current_plan = fire_read(planner_key) or {}
+
+    with st.form("planner_form"):
+        st.subheader(f"Plan for Today: **{today}**")
+        p1 = st.text_input("🎯 P1 (Most Important/Deep Work Task)", value=current_plan.get('p1', ''))
+        p2 = st.text_input("🔹 P2 (Secondary Task/Review)", value=current_plan.get('p2', ''))
+        p3 = st.text_input("🔸 P3 (Minor Task/Skill Practice)", value=current_plan.get('p3', ''))
+        est_hours = st.number_input("Est. Total Hours of Deep Work", 0.0, 12.0, value=current_plan.get('est_hours', 4.0), step=0.5)
+
+        focus_options = ["DSA/Algorithms", "AI/ML Project", "Semester Subject Review", "Skill Development (e.g., DevOps)", "Other"]
+        focus_area = st.selectbox("Main Focus Area Today", focus_options, index=focus_options.index(current_plan.get('focus_area', 'DSA/Algorithms')) if current_plan.get('focus_area') in focus_options else 0)
+        
+        submitted = st.form_submit_button("Save Today's Plan", type="primary")
+
+        if submitted:
+            plan = {"date": today, "p1": p1, "p2": p2, "p3": p3, "est_hours": est_hours, "focus_area": focus_area}
+            fire_write(planner_key, plan)
+            st.success("Daily Plan Saved! Ready for execution.")
+            st.cache_data.clear() # Clear cache after write
+            st.experimental_rerun()
+            
+    if current_plan:
+        st.markdown("---")
+        st.subheader("Current Plan Summary")
+        st.markdown(f"**Focus Area:** **{current_plan['focus_area']}**")
+        st.markdown(f"**Estimated Hours:** `{current_plan['est_hours']} hrs`")
+
+
+# --- DAILY WORK LOG ---
+def daily_work():
+    st.header("✍️ Daily Work Log", divider='blue')
+
+    with st.form("daily_log_form"):
+        st.subheader("Log Your Accomplishments")
+        task = st.text_area("Describe **what specific task you completed** and **from where**.")
+        hours = st.number_input("Actual Deep Work Hours", 0.0, 24.0, 0.0, step=0.5)
+
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        mood = col1.slider("Mood (1=Bad, 5=Great)", 1, 5, 3)
+        productivity = col2.slider("Productivity (1=Low Focus, 5=High Focus)", 1, 5, 3)
+        energy = col3.slider("Energy (1=Drained, 5=Energized)", 1, 5, 3)
+
+        submitted = st.form_submit_button("Save Log", type="primary")
+
+        if submitted:
+            entry = {"task": task, "hours": hours, "mood": mood, "productivity": productivity, "energy": energy, "date": datetime.now().strftime("%Y-%m-%d")}
+            fire_push(f"daily/{st.session_state['user']}", entry)
+            st.success("Daily work saved! Check the 'Graphs & Insights' for your trend.")
+            st.cache_data.clear()
+            st.experimental_rerun()
+
+    st.markdown("---")
+    st.subheader("History (Recent Logs)")
+    df = get_daily_logs(st.session_state['user'])
+    if not df.empty:
+        st.dataframe(df[['date', 'hours', 'task', 'productivity', 'energy']].head(10).rename(columns={'hours': 'Hours', 'task': 'Task Description', 'productivity': 'Prod', 'energy': 'Energy'}), use_container_width=True, hide_index=True)
+    else:
+        st.info("No work history found.")
+
+
+# --- PROJECT TRACKER ---
+def projects():
+    st.header("⚙️ Project Tracker", divider='blue')
+
+    with st.expander("Add/Update Project", expanded=False):
+        with st.form("project_form"):
+            name = st.text_input("Project Name (e.g., 4th Sem AI Project)")
+            progress = st.slider("Progress (%)", 0, 100, 0)
+            notes = st.text_area("Pending: What is left to be done?")
+            
+            submitted = st.form_submit_button("Save Project", type="primary")
+
+            if submitted:
+                entry = {"name": name, "progress": progress, "notes": notes, "updated": datetime.now().strftime("%Y-%m-%d")}
+                fire_push(f"projects/{st.session_state['user']}", entry) 
+                st.success("Project saved/updated.")
+                st.cache_data.clear()
+                st.experimental_rerun()
+
+    st.subheader("Project Status (Pending Work)")
+    data = fire_read(f"projects/{st.session_state['user']}") or {}
+    
+    if data:
+        df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()]) 
+        st.dataframe(df[['name', 'progress', 'updated', 'notes']].rename(columns={'name': 'Project', 'progress': 'Progress (%)', 'updated': 'Last Update', 'notes': 'Pending Tasks'}), use_container_width=True, hide_index=True)
+        fig = px.bar(df.sort_values(by='progress', ascending=False), x='name', y='progress', color='progress', color_continuous_scale=px.colors.sequential.Teal, title='Project Progress Overview', template='plotly_white')
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No projects added yet.")
+
+
+# --- LEARNING LOG ---
+def learning():
+    st.header("🧠 Learning Log: Concepts & Resources", divider='blue')
+
+    with st.form("learning_form"):
+        topic = st.text_input("What specific concept/skill did you learn/revise?")
+        source = st.text_input("Source (e.g., Coursera NLP module, Textbook Chapter 6)")
+        link = st.text_input("Resource Link (Optional)")
+        keywords = st.text_input("Keywords (e.g., Python, DP, OOP, React)", help="Separate with commas")
+        
+        submitted = st.form_submit_button("Save Learning", type="primary")
+
+        if submitted:
+            entry = {"topic": topic, "source": source, "link": link, "keywords": [k.strip() for k in keywords.split(',')], "date": datetime.now().strftime("%Y-%m-%d")}
+            fire_push(f"learning/{st.session_state['user']}", entry)
+            st.success("Learning saved. Track your skills!")
+            st.cache_data.clear()
+            st.experimental_rerun()
+
+    st.subheader("Learning History")
+    data = fire_read(f"learning/{st.session_state['user']}") or {}
+    if data:
+        df = pd.DataFrame(data.values())
+        df = df.sort_values(by='date', ascending=False)
+        st.dataframe(df[['date', 'topic', 'source', 'keywords']].rename(columns={'topic': 'Concept', 'source': 'Source'}), use_container_width=True, hide_index=True)
+        
+        all_keywords = [item for sublist in df['keywords'].dropna() for item in sublist]
+        if all_keywords:
+            kw_series = pd.Series(all_keywords).value_counts().head(10)
+            fig = px.pie(kw_series, values=kw_series.values, names=kw_series.index, title='Top 10 Learning Focus Areas', color_discrete_sequence=px.colors.sequential.RdBu)
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No learning history found.")
+
+
+# --- WEEKLY GOALS ---
+def weekly_goals():
+    st.header("📅 Weekly Goals", divider='blue')
+    current_week = datetime.now().isocalendar().week
+    st.subheader(f"Goals for Week **{current_week}**")
+
+    with st.expander("Add a New Goal", expanded=False):
+        with st.form("goal_form"):
+            goal = st.text_input("Goal Title (e.g., Complete 5 LeetCode Mediums)")
+            target = st.text_area("Target Description/Success Criteria")
+            status = st.selectbox("Initial Status", ["To Do", "In Progress", "Completed", "Failed/Deferred"])
+
+            submitted = st.form_submit_button("Add Goal", type="primary")
+
+            if submitted:
+                entry = {"goal": goal, "target": target, "week": current_week, "status": status, "created": datetime.now().strftime("%Y-%m-%d")}
+                fire_push(f"goals/{st.session_state['user']}", entry)
+                st.success("Goal added! Good luck.")
+                st.cache_data.clear()
+                st.experimental_rerun()
+
+    st.subheader("Current Week Goals")
+    data = fire_read(f"goals/{st.session_state['user']}") or {}
+    if data:
+        df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()])
+        df['key'] = data.keys() # Add keys for updating
+        df = df.sort_values(by=['week', 'status'], ascending=[False, True])
+        current_week_df = df[df['week'] == current_week]
+        
+        if not current_week_df.empty:
+            st.dataframe(current_week_df[['goal', 'status', 'target']].rename(columns={'goal': 'Goal', 'target': 'Details'}), use_container_width=True, hide_index=True)
+
+            status_counts = current_week_df['status'].value_counts()
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Goals", len(current_week_df))
+            c2.metric("Completed ✅", status_counts.get("Completed", 0))
+            
+            st.markdown("---")
+            st.markdown("**Quick Status Update**")
+            
+            update_data = current_week_df[current_week_df['status'] != 'Completed']
+            if not update_data.empty:
+                goal_options = update_data['goal'].tolist()
+                col_goal, col_status, col_button = st.columns([3, 2, 1])
+                goal_to_update = col_goal.selectbox("Select Goal to Update Status", goal_options)
+                
+                initial_status = update_data[update_data['goal'] == goal_to_update]['status'].iloc[0]
+                status_options = ["To Do", "In Progress", "Completed", "Failed/Deferred"]
+                new_status = col_status.selectbox("New Status", status_options, index=status_options.index(initial_status))
+                
+                if col_button.button("Update"):
+                    key_to_update = current_week_df[current_week_df['goal'] == goal_to_update]['key'].iloc[0]
+                    fire_update(f"goals/{st.session_state['user']}/{key_to_update}", {"status": new_status})
+                    st.success(f"Status for '{goal_to_update}' updated to **{new_status}**.")
+                    st.cache_data.clear()
+                    st.experimental_rerun()
+            else:
+                st.info("All current goals are completed or no goals set!")
+        else:
+            st.info(f"No goals set for week {current_week} yet.")
+
+
+# --- HABIT TRACKER ---
+def habits():
+    st.header("✅ Daily Habit Tracker (Consistency Check)", divider='blue')
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    df_habits = get_habit_logs(st.session_state['user'])
+    today_log = df_habits[df_habits['date'].dt.strftime('%Y-%m-%d') == today]
+    
+    is_logged = not today_log.empty
+    current_checked = today_log['habits'].iloc[0] if is_logged else {}
+
+    if is_logged:
+        st.warning(f"Habits for **{today}** are already logged. Use the form below to **UPDATE**.")
+    else:
+        st.info(f"Log your habits for **{today}**.")
+
+    with st.form("habit_form"):
+        st.subheader("Check the habits you completed today:")
+        checked = {}
+        cols = st.columns(3)
+        
+        for idx, habit in enumerate(HABITS):
+            col = cols[idx % 3]
+            default_state = current_checked.get(habit, False)
+            checked[habit] = col.checkbox(habit, value=default_state)
+
+        button_label = "Update Habits" if is_logged else "Save Habits"
+        if st.form_submit_button(button_label, type="primary"):
+            entry = {"date": today, "habits": checked}
+            
+            if is_logged:
+                key_to_update = today_log['key'].iloc[0]
+                fire_update(f"habits/{st.session_state['user']}/{key_to_update}", entry)
+                st.success(f"Habit log for {today} updated!")
+            else:
+                fire_push(f"habits/{st.session_state['user']}", entry)
+                st.success("Habit log saved!")
+                
+            st.cache_data.clear()
+            st.experimental_rerun()
+
+    st.markdown("---")
+    st.subheader("Habit Consistency & Streak")
+    
+    if not df_habits.empty:
+        df_habits['total_done'] = df_habits['habits'].apply(lambda x: sum(x.values()))
+        df_habits['date_str'] = df_habits['date'].dt.strftime('%Y-%m-%d')
+
+        fig = px.bar(df_habits.sort_values(by='date', ascending=True).tail(14), 
+                     x='date_str', y='total_done', 
+                     title='Habits Completed (Last 14 Days)',
+                     labels={'total_done': 'Number of Habits Done', 'date_str': 'Date'},
+                     template='plotly_white',
+                     color='total_done', 
+                     color_continuous_scale=px.colors.sequential.Viridis)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No habit history found.")
+
+
+# --- PEER REVIEW ---
 def peer_review():
     st.header("🤝 Peer Review and Accountability", divider='violet')
     st.write("View the current status, today's plan, and recent activity of your group members.")
 
     current_user = st.session_state['user']
-    other_users = [u for u in USERS.keys() if u != current_user]
+    other_users = [u for u in PEER_USERS if u != current_user]
     today = datetime.now().strftime("%Y-%m-%d")
-
-    st.subheader(f"Status as of **{today}**")
 
     for peer in other_users:
         st.markdown(f"### 🧑‍💻 {peer.title()}'s Activity")
@@ -302,14 +446,13 @@ def peer_review():
         # 1. Today's Plan
         with col_plan:
             plan_key = f"planner/{peer}/{today}"
-            peer_plan = read(plan_key) or {}
+            peer_plan = fire_read(plan_key) or {}
             
             st.markdown("#### 🎯 Today's Focus (Planned)")
             if peer_plan:
-                st.info(f"**Focus Area:** {peer_plan['focus_area']}")
-                st.markdown(f"**Est. Hours:** `{peer_plan['est_hours']} hrs`")
+                st.info(f"**Focus Area:** {peer_plan.get('focus_area', 'N/A')}")
+                st.markdown(f"**Est. Hours:** `{peer_plan.get('est_hours', 0.0)} hrs`")
                 st.markdown(f"**P1 (Deep Work):** {peer_plan.get('p1', 'N/A')}")
-                if peer_plan.get('p2'): st.markdown(f"**P2:** {peer_plan['p2']}")
             else:
                 st.warning("No daily plan logged yet.")
 
@@ -332,7 +475,7 @@ def peer_review():
         col_proj, col_habits = st.columns(2)
 
         with col_proj:
-            peer_projects = read(f"projects/{peer}") or {}
+            peer_projects = fire_read(f"projects/{peer}") or {}
             st.markdown("##### ⚙️ Current Project Status")
             if peer_projects:
                 df_proj = pd.DataFrame(peer_projects.values())
@@ -364,46 +507,94 @@ def peer_review():
             else:
                 st.info("No habit history found.")
         
-        st.markdown("---") # Visual separator between peers
+        st.markdown("---")
 
-# --- Rest of the functions (Daily Planner, Daily Work, Projects, Learning, Weekly Goals, Habits, Graphs & Insights) ---
-# NOTE: These functions remain the same as the previous full code, 
-# but are omitted here for brevity. Please ensure you keep them in your final app.py file. 
-# The implementations are assumed to be complete from the previous step.
 
-def daily_planner(): 
-    st.warning("Daily Planner function placeholder. See the full code from the previous step.")
-    pass
-def daily_work():
-    st.warning("Daily Work Log function placeholder. See the full code from the previous step.")
-    pass
-def projects():
-    st.warning("Project Tracker function placeholder. See the full code from the previous step.")
-    pass
-def learning():
-    st.warning("Learning Log function placeholder. See the full code from the previous step.")
-    pass
-def weekly_goals():
-    st.warning("Weekly Goals function placeholder. See the full code from the previous step.")
-    pass
-def habits():
-    st.warning("Habit Tracker function placeholder. See the full code from the previous step.")
-    pass
+# --- GRAPHS & INSIGHTS ---
 def graphs_and_insights():
-    st.warning("Graphs & Insights function placeholder. See the full code from the previous step.")
-    pass
+    st.header("📊 Graphs & Insights", divider='blue')
+    
+    tab1, tab2, tab3 = st.tabs(["Performance Graphs", "Actionable Suggestions", "Comparison (Peer View)"])
+
+    # --- TAB 1: Performance Graphs ---
+    with tab1:
+        st.subheader("Daily Log Trends")
+        df = get_daily_logs(st.session_state['user'])
+    
+        if df.empty:
+            st.info("No data to graph yet.")
+        else:
+            fig_hours = px.line(df, x="date", y="hours", title="Hours Worked Over Time", template='plotly_white', line_shape='spline')
+            st.plotly_chart(fig_hours, use_container_width=True)
+            
+            df_melted = df.melt(id_vars='date', value_vars=['mood', 'productivity', 'energy'], var_name='Metric', value_name='Rating')
+            fig_ratings = px.line(df_melted, x="date", y="Rating", color='Metric', title="Mood, Productivity, & Energy Trends (1-5)", template='plotly_white')
+            st.plotly_chart(fig_ratings, use_container_width=True)
+
+    # --- TAB 2: AI Suggestions ---
+    with tab2:
+        st.subheader("Improvement Suggestions (Based on Your Logs)")
+
+        df_work = get_daily_logs(st.session_state['user'])
+        df_habits = get_habit_logs(st.session_state['user'])
+
+        if df_work.empty:
+            st.info("Add some logs to generate suggestions.")
+            return
+
+        suggestions = []
+        avg_productivity = df_work['productivity'].mean().round(2)
+        avg_energy = df_work['energy'].mean().round(2)
+        avg_hours = df_work['hours'].mean().round(2)
+
+        if avg_productivity < 3.8:
+             suggestions.append(f"**Productivity is moderate ({avg_productivity}/5).** Try implementing the **Pomodoro technique** or dedicated **deep work sessions** to minimize distractions.")
+
+        if avg_energy < 3.5:
+            suggestions.append(f"**Average Energy is low ({avg_energy}/5).** Prioritize **sleep (7-8 hours)** and hydration. Low energy severely limits the capacity for deep work.")
+
+        st.write("### Personalized Insights:")
+        for s in suggestions:
+            st.markdown(f"**💡 {s}**")
+
+    # --- TAB 3: Comparison ---
+    with tab3:
+        st.subheader("Peer Performance Comparison (Motivational View)")
+        
+        comparison_data = []
+        
+        for user in PEER_USERS:
+            df_user = get_daily_logs(user)
+            df_habits_user = get_habit_logs(user)
+            
+            comp_entry = {
+                "User": user.title(),
+                "Total Logs": len(df_user),
+                "Avg Hours": df_user['hours'].mean().round(2) if not df_user.empty else 0.0,
+                "Avg Prod": df_user['productivity'].mean().round(2) if not df_user.empty else 0.0,
+                "Habit Days": len(df_habits_user)
+            }
+            comparison_data.append(comp_entry)
+
+        df_comp = pd.DataFrame(comparison_data)
+
+        def highlight_max(s):
+            is_max = s == s.max()
+            return ['background-color: #d4edda; color: #155724; font-weight: bold;' if v else '' for v in is_max]
+
+        st.dataframe(df_comp.style.apply(highlight_max, subset=['Avg Hours', 'Avg Prod', 'Total Logs', 'Habit Days']), use_container_width=True)
 
 
-# -----------------------------
-# MAIN ROUTER
-# -----------------------------
+# ==========================================================
+# 4. MAIN ROUTER
+# ==========================================================
 if "user" not in st.session_state:
     login_page()
 else:
-    navbar()
-
-    page = st.session_state.get("page", "Dashboard") 
-
+    # Sidebar Navigation
+    st.sidebar.title("📚 Student Progress Tracker")
+    st.sidebar.markdown(f"**Logged in as: {st.session_state['user'].title()}**")
+    
     page_functions = {
         "Dashboard": dashboard,
         "Daily Planner": daily_planner,
@@ -412,21 +603,27 @@ else:
         "Learning": learning,
         "Weekly Goals": weekly_goals,
         "Habits": habits,
-        "Peer Review": peer_review,  # <-- NEW PAGE
+        "Peer Review": peer_review,
         "Graphs & Insights": graphs_and_insights
     }
+
+    # Set initial page state if not already set
+    if "page" not in st.session_state:
+         st.session_state["page"] = "Dashboard"
+
+    selected_page = st.sidebar.selectbox(
+        "Navigation",
+        list(page_functions.keys()),
+        index=list(page_functions.keys()).index(st.session_state["page"])
+    )
     
-    if page in page_functions:
-        # NOTE: Using a simple placeholder for functions not fully provided here. 
-        # In your final code, replace the 'pass' functions above with the full code.
-        if page == "Daily Planner": daily_planner()
-        elif page == "Daily Log": daily_work()
-        elif page == "Projects": projects()
-        elif page == "Learning": learning()
-        elif page == "Weekly Goals": weekly_goals()
-        elif page == "Habits": habits()
-        elif page == "Graphs & Insights": graphs_and_insights()
-        elif page == "Peer Review": peer_review()
-        else: dashboard()
-    else:
-        st.error("Page not found!")
+    st.session_state["page"] = selected_page
+
+    # Logout button in sidebar
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Logout 🚪"):
+        st.session_state.clear()
+        st.rerun()
+
+    # Call the selected page function
+    page_functions[st.session_state["page"]]()
