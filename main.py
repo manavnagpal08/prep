@@ -1,17 +1,17 @@
 import streamlit as st
+import requests  # Import the standard HTTP library
 from datetime import datetime, timedelta
 import pandas as pd
 import plotly.express as px
-import firebase_admin
-from firebase_admin import credentials, db
 import json
 import uuid
 from collections import defaultdict
 
 # ==========================================================
-# 1. CONFIGURATION AND FIREBASE SETUP
+# 1. CONFIGURATION AND FIREBASE SETUP (REST API)
 # ==========================================================
 
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="AI/DS Progress Tracker", layout="wide", initial_sidebar_state="expanded")
 
 # --- FIXED USERS ---
@@ -33,43 +33,24 @@ HABITS = [
     "Wake Up on Time"
 ]
 
-# --- FIREBASE SETUP (HARDCODED) ---
-# 🚨 WARNING: This method is highly insecure and should only be used for local testing.
-# ==========================================================
-# FIREBASE INITIALIZATION (FINAL FIXED VERSION)
-# ==========================================================
-
-# ==========================================================
-# FIREBASE INITIALIZATION (FINAL FIX)
-# ==========================================================
-
+# --- REST API SETUP ---
 try:
-    key_dict = {
-        "type": st.secrets["type"],
-        "project_id": st.secrets["project_id"],
-        "private_key_id": st.secrets["private_key_id"],
-        "private_key": st.secrets["private_key"],
-        "client_email": st.secrets["client_email"],
-        "client_id": st.secrets["client_id"],
-        "auth_uri": st.secrets["auth_uri"],
-        "token_uri": st.secrets["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": st.secrets["client_x509_cert_url"],
-        "universe_domain": st.secrets["universe_domain"],
-    }
-
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(key_dict)
-        firebase_admin.initialize_app(cred, {
-            "databaseURL": st.secrets["database_url"]
-        })
-
-    database_ref = db.reference("/")
+    if 'api_key' in st.secrets and 'database_url' in st.secrets:
+        # Base URL for the Firebase REST API
+        BASE_URL = st.secrets['database_url']
+        # Authentication token (Firebase API Key)
+        AUTH_PARAM = f'?auth={st.secrets["api_key"]}' 
+        
+        # Ensure the URL ends with a slash for easy path concatenation
+        if not BASE_URL.endswith('/'):
+            BASE_URL += '/'
+    else:
+        st.error("FATAL ERROR: Firebase API secrets not found. Please ensure 'api_key' and 'database_url' are configured in st.secrets.")
+        st.stop() 
 
 except Exception as e:
-    st.error(f"🔥 FATAL ERROR: Firebase initialization failed.\n\n{e}")
-    st.stop()
-
+    st.error(f"FATAL ERROR: Configuration Failed. Error: {e}")
+    st.stop() 
 
 # -----------------------------
 # DESIGN/STYLES (Optional: Requires styles.css in the same directory)
@@ -81,27 +62,50 @@ except FileNotFoundError:
     pass 
 
 # ==========================================================
-# 2. DATABASE WRAPPER FUNCTIONS & CACHING
+# 2. DATABASE WRAPPER FUNCTIONS & CACHING (REST API)
 # ==========================================================
 
+def _get_url(path):
+    """Constructs the full REST endpoint URL."""
+    # Firebase REST API paths require a '.json' suffix
+    return f"{BASE_URL}{path}.json{AUTH_PARAM}"
+
 def fire_read(path):
-    """Reads data from Firebase."""
-    return db.reference(path).get()
+    """Reads data from Firebase using GET request."""
+    response = requests.get(_get_url(path))
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Read Error ({response.status_code}): {response.text}")
+        return None
 
 def fire_write(path, data):
-    """Writes data to Firebase."""
-    db.reference(path).set(data)
-    return True
+    """Writes data (overwrites) to Firebase using PUT request."""
+    response = requests.put(_get_url(path), json=data)
+    if response.status_code == 200:
+        return True
+    else:
+        st.error(f"Write Error ({response.status_code}): {response.text}")
+        return False
 
 def fire_update(path, data):
-    """Updates data in Firebase."""
-    db.reference(path).update(data)
-    return True
+    """Updates data in Firebase using PATCH request."""
+    response = requests.patch(_get_url(path), json=data)
+    if response.status_code == 200:
+        return True
+    else:
+        st.error(f"Update Error ({response.status_code}): {response.text}")
+        return False
 
 def fire_push(path, data):
-    """Pushes new data with a unique key and returns the key."""
-    new_ref = db.reference(path).push(data)
-    return new_ref.key
+    """Pushes new data with a unique key using POST request."""
+    response = requests.post(_get_url(path), json=data)
+    if response.status_code == 200:
+        # The response body contains the unique key pushed by Firebase
+        return response.json().get('name')
+    else:
+        st.error(f"Push Error ({response.status_code}): {response.text}")
+        return None
 
 @st.cache_data(ttl=600)
 def get_daily_logs(user):
@@ -155,7 +159,9 @@ def dashboard():
     st.header(f"🚀 Welcome Back, **{st.session_state['user'].title()}**!", divider='blue')
 
     df_work = get_daily_logs(st.session_state['user'])
-    df_proj = pd.DataFrame((fire_read(f"projects/{st.session_state['user']}") or {}).values())
+    # fire_read returns a dictionary where keys are Firebase push IDs
+    project_data = fire_read(f"projects/{st.session_state['user']}") or {}
+    df_proj = pd.DataFrame(project_data.values()) if project_data else pd.DataFrame()
     
     col1, col2, col3, col4 = st.columns(4)
 
@@ -169,7 +175,8 @@ def dashboard():
     
     if not df_work.empty:
         one_week_ago = datetime.now() - timedelta(days=7)
-        df_work_recent = df_work[df_work['date'] >= one_week_ago.strftime('%Y-%m-%d')]
+        # Ensure date comparison works correctly (using string format for comparison with saved date string)
+        df_work_recent = df_work[df_work['date'].dt.strftime('%Y-%m-%d') >= one_week_ago.strftime('%Y-%m-%d')] 
         
         if not df_work_recent.empty:
             avg_hours = df_work_recent['hours'].mean().round(1)
@@ -195,8 +202,8 @@ def dashboard():
 def daily_planner():
     st.header("📝 Daily Pre-Work Planner", divider='orange')
     today = datetime.now().strftime("%Y-%m-%d")
-    planner_key = f"planner/{st.session_state['user']}/{today}"
-    current_plan = fire_read(planner_key) or {}
+    planner_path = f"planner/{st.session_state['user']}/{today}"
+    current_plan = fire_read(planner_path) or {}
 
     with st.form("planner_form"):
         st.subheader(f"Plan for Today: **{today}**")
@@ -212,7 +219,7 @@ def daily_planner():
 
         if submitted:
             plan = {"date": today, "p1": p1, "p2": p2, "p3": p3, "est_hours": est_hours, "focus_area": focus_area}
-            fire_write(planner_key, plan)
+            fire_write(planner_path, plan)
             st.success("Daily Plan Saved! Ready for execution.")
             st.cache_data.clear()
             st.experimental_rerun()
@@ -270,6 +277,7 @@ def projects():
             submitted = st.form_submit_button("Save Project", type="primary")
 
             if submitted:
+                # Projects use POST (fire_push) to get a unique ID, then we store the data
                 entry = {"name": name, "progress": progress, "notes": notes, "updated": datetime.now().strftime("%Y-%m-%d")}
                 fire_push(f"projects/{st.session_state['user']}", entry) 
                 st.success("Project saved/updated.")
@@ -280,6 +288,7 @@ def projects():
     data = fire_read(f"projects/{st.session_state['user']}") or {}
     
     if data:
+        # data is a dict of dicts, keys are the Firebase IDs
         df = pd.DataFrame([dict(key=k, **v) for k, v in data.items()]) 
         st.dataframe(df[['name', 'progress', 'updated', 'notes']].rename(columns={'name': 'Project', 'progress': 'Progress (%)', 'updated': 'Last Update', 'notes': 'Pending Tasks'}), use_container_width=True, hide_index=True)
         fig = px.bar(df.sort_values(by='progress', ascending=False), x='name', y='progress', color='progress', color_continuous_scale=px.colors.sequential.Teal, title='Project Progress Overview', template='plotly_white')
@@ -375,6 +384,7 @@ def weekly_goals():
                 
                 if col_button.button("Update"):
                     key_to_update = current_week_df[current_week_df['goal'] == goal_to_update]['key'].iloc[0]
+                    # Since we are using fire_update, we pass the path including the unique ID
                     fire_update(f"goals/{st.session_state['user']}/{key_to_update}", {"status": new_status})
                     st.success(f"Status for '{goal_to_update}' updated to **{new_status}**.")
                     st.cache_data.clear()
@@ -461,8 +471,8 @@ def peer_review():
 
         # 1. Today's Plan
         with col_plan:
-            plan_key = f"planner/{peer}/{today}"
-            peer_plan = fire_read(plan_key) or {}
+            plan_path = f"planner/{peer}/{today}"
+            peer_plan = fire_read(plan_path) or {}
             
             st.markdown("#### 🎯 Today's Focus (Planned)")
             if peer_plan:
@@ -512,7 +522,7 @@ def peer_review():
             st.markdown("##### ✅ Habit Consistency (Last 7 Days)")
             if not df_peer_habits.empty:
                 one_week_ago = datetime.now() - timedelta(days=7)
-                df_recent_habits = df_peer_habits[df_peer_habits['date'] >= one_week_ago.strftime('%Y-%m-%d')]
+                df_recent_habits = df_peer_habits[df_peer_habits['date'].dt.strftime('%Y-%m-%d') >= one_week_ago.strftime('%Y-%m-%d')]
                 
                 if not df_recent_habits.empty:
                     df_recent_habits['total_done'] = df_recent_habits['habits'].apply(lambda x: sum(x.values()))
